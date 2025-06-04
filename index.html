@@ -181,6 +181,26 @@
       font-size: 0.9rem;
     }
 
+    .modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.6);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 150;
+    }
+
+    .modal-content {
+      background: #222;
+      padding: 1rem;
+      border-radius: var(--border-radius);
+      max-width: 300px;
+    }
+
     .description-box {
       margin-top: 1rem;
       background: #222;
@@ -238,12 +258,38 @@
     .edit-button:hover {
       background: #4a00b5;
     }
+    .delete-button {
+      position: absolute;
+      top: 1rem;
+      right: 3.5rem;
+      background: #f44336;
+      color: white;
+      font-size: 1.1rem;
+      border: none;
+      padding: 0.5rem;
+      border-radius: var(--border-radius);
+      cursor: pointer;
+    }
+    .delete-button:hover {
+      background: #d32f2f;
+    }
   </style>
 </head>
 <body>
 
   <!-- Попап -->
   <div id="popup" class="popup" style="pointer-events: none; opacity: 0;"></div>
+
+  <!-- Диалог подтверждения -->
+  <div id="confirm-modal" class="modal">
+    <div class="modal-content">
+      <p id="confirm-message"></p>
+      <div style="text-align: right; margin-top: 1rem;">
+        <button id="confirm-yes">Да</button>
+        <button id="confirm-no" style="background: #555; margin-left: 0.5rem;">Нет</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Левая панель -->
   <div class="sidebar">
@@ -448,39 +494,108 @@
       setTimeout(() => popup.classList.remove("show"), 3000);
     }
 
+    function showConfirm(text, onYes) {
+      const modal = document.getElementById("confirm-modal");
+      const msg = document.getElementById("confirm-message");
+      const yesBtn = document.getElementById("confirm-yes");
+      const noBtn = document.getElementById("confirm-no");
+
+      msg.textContent = text;
+      modal.style.display = "flex";
+
+      const cleanup = () => {
+        yesBtn.onclick = null;
+        noBtn.onclick = null;
+        modal.style.display = "none";
+      };
+
+      yesBtn.onclick = () => { cleanup(); onYes && onYes(); };
+      noBtn.onclick = cleanup;
+    }
+
+    function formatForLog(arg) {
+      if (typeof arg === "object") {
+        try { return JSON.stringify(arg); } catch { return String(arg); }
+      }
+      return String(arg);
+    }
+
     function logToDebugBox(...args) {
       const output = document.getElementById("debug-output");
       const entry = document.createElement("div");
       entry.className = "debug-entry info";
-      entry.textContent = args.join(" ");
+      entry.textContent = `${new Date().toLocaleTimeString()} ${args.join(" ")}`;
       output.appendChild(entry);
       output.scrollTop = output.scrollHeight;
     }
 
-    console.log = (...args) => logToDebugBox("[LOG]", ...args.map(String));
-    console.warn = (...args) => {
-      const output = document.getElementById("debug-output");
-      const entry = document.createElement("div");
-      entry.className = "debug-entry warn";
-      entry.textContent = "[WARN] " + args.join(" ");
-      output.appendChild(entry);
-      output.scrollTop = output.scrollHeight;
-    };
+    ["log", "warn", "error", "info", "debug"].forEach(level => {
+      const original = console[level];
+      console[level] = (...args) => {
+        logToDebugBox(`[${level.toUpperCase()}]`, ...args.map(formatForLog));
+        original && original.apply(console, args);
+      };
+    });
 
-    console.error = (...args) => {
-      const output = document.getElementById("debug-output");
-      const entry = document.createElement("div");
-      entry.className = "debug-entry error";
-      entry.textContent = "[ERROR] " + args.join(" ");
-      output.appendChild(entry);
-      output.scrollTop = output.scrollHeight;
-    };
+    const DB_NAME = "prompt-manager";
+    const STORE_NAME = "handles";
+
+    function openDB() {
+      return new Promise(resolve => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = () => req.result.createObjectStore(STORE_NAME);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+      });
+    }
+
+    async function saveHandle(handle) {
+      const db = await openDB();
+      if (!db) return;
+      const tx = db.transaction(STORE_NAME, "readwrite");
+      tx.objectStore(STORE_NAME).put(handle, "dir");
+    }
+
+    async function getSavedHandle() {
+      const db = await openDB();
+      if (!db) return null;
+      return new Promise(resolve => {
+        const tx = db.transaction(STORE_NAME, "readonly");
+        const req = tx.objectStore(STORE_NAME).get("dir");
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+      });
+    }
+
+    async function resolvePromptsDir(dir) {
+      try {
+        return await dir.getDirectoryHandle("prompts", { create: false });
+      } catch (e) {
+        if (dir.name && dir.name.toLowerCase() === "prompts") return dir;
+        throw e;
+      }
+    }
+
+    async function autoLoadPrompts() {
+      try {
+        const saved = await getSavedHandle();
+        if (!saved) throw new Error("no handle");
+        const perm = await saved.requestPermission({ mode: "readwrite" });
+        if (perm !== "granted") throw new Error("permission");
+        directoryHandle = saved;
+        const promptDir = await resolvePromptsDir(saved);
+        loadPrompts(promptDir);
+      } catch (e) {
+        showPopup("⚠️ Папка 'prompts' не найдена", "info");
+      }
+    }
 
     async function loadPromptsFromFolder() {
       try {
         const dir = await window.showDirectoryPicker({ mode: "readwrite" });
         directoryHandle = dir;
-        const promptDir = await dir.getDirectoryHandle("prompts", { create: false });
+        await saveHandle(dir);
+        const promptDir = await resolvePromptsDir(dir);
         loadPrompts(promptDir);
       } catch (e) {
         showPopup("❌ Папка 'prompts' не найдена", "error");
@@ -490,7 +605,7 @@
     async function refreshPrompts() {
       if (!directoryHandle) return showPopup("❗ Папка не выбрана", "error");
 
-      const promptDir = await directoryHandle.getDirectoryHandle("prompts", { create: false });
+      const promptDir = await resolvePromptsDir(directoryHandle);
       loadPrompts(promptDir);
     }
 
@@ -715,6 +830,7 @@
       container.innerHTML = `
         <div style="position: relative;">
           <button class="edit-button" onclick="showEditCard(currentPrompt)">✎</button>
+          <button class="delete-button" onclick="deletePrompt(currentPrompt)">🗑️</button>
 
           <h2>${prompt.metadata.title}</h2>
 
@@ -799,6 +915,23 @@
       });
     }
 
+async function deletePrompt(prompt) {
+  if (!prompt || !directoryHandle) return;
+  showConfirm(`Удалить промпт "${prompt.metadata.title}"?`, async () => {
+    try {
+      const promptDir = await resolvePromptsDir(directoryHandle);
+      await promptDir.removeEntry(prompt.fileHandle.name);
+      prompts = prompts.filter(p => p !== prompt);
+      currentPrompt = null;
+      document.getElementById("card-container").innerHTML = "<p>Выберите промпт из списка слева</p>";
+      renderPromptList();
+      showPopup("🗑️ Промпт удалён", "success");
+    } catch (e) {
+      console.error("Не удалось удалить файл", e);
+      showPopup("❌ Ошибка удаления", "error");
+    }
+  });
+}
     function generateUUID() {
       return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
         (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
@@ -839,7 +972,7 @@
 
       if (!directoryHandle) return showPopup("❗ Папка не выбрана", "error");
 
-      const promptDir = await directoryHandle.getDirectoryHandle("prompts", { create: false });
+      const promptDir = await resolvePromptsDir(directoryHandle);
       const filename = title.replace(/\s+/g, "_") + ".md";
       const fileHandle = await promptDir.getFileHandle(filename, { create: true });
 
@@ -872,18 +1005,7 @@
 
     window.onload = () => {
       loadInitial();
-
-      (async () => {
-        try {
-          const dir = await window.showDirectoryPicker({ mode: "readwrite" });
-          directoryHandle = dir;
-          const promptDir = await dir.getDirectoryHandle("prompts", { create: false });
-          // showPopup(`⚠️ ${promptDir}`, "info");
-          loadPrompts(promptDir);
-        } catch (e) {
-          showPopup("⚠️ Папка 'prompts' не найдена", "info");
-        }
-      })();
+      autoLoadPrompts();
     };
   </script>
 </body>
