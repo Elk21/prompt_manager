@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Параметризованные промпты</title>
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js "></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter&display=swap ');
+    @import url('https://fonts.googleapis.com/css2?family=Inter&display=swap');
 
     :root {
       --bg: #1e1e1e;
@@ -107,6 +108,34 @@
     .tag-color:nth-child(4) { background: #f44336; color: white; }
     .tag-color:nth-child(5) { background: #4caf50; color: white; }
     .tag-color:nth-child(6) { background: #9c27b0; color: white; }
+
+    .search-panel {
+      background: #1a1a1a;
+      padding: 0.75rem;
+      border-radius: var(--border-radius);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .search-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .btn-filter-toggle {
+      background: #333;
+      color: white;
+      border: none;
+      padding: 0.5rem;
+      border-radius: var(--border-radius);
+      cursor: pointer;
+    }
+
+    .btn-filter-toggle:hover {
+      background: #444;
+    }
 
     .params-block {
       margin-top: 1rem;
@@ -222,37 +251,38 @@
       <button id="btn-load">Выбрать папку</button>
       <button onclick="refreshPrompts()" style="background: #333;">Обновить</button>
     </div>
-    
+
     <button onclick="showCreateForm()">➕ Создать новый промпт</button>
 
-    <div style="display: flex; align-items: center; gap: 0.5rem;">
-      <input type="text" id="search" placeholder="Поиск..." />
-      <button class="btn-filter-toggle" onclick="toggleFilter()">⚙</button>
+    <div class="search-panel">
+      <div class="search-row">
+        <input type="text" id="search" placeholder="Поиск...">
+        <button class="btn-filter-toggle" onclick="toggleFilter()">⚙</button>
+      </div>
+      <details id="filters-details" style="display: none;">
+        <summary><span>Фильтр и сортировка</span></summary>
+        <div style="margin-top: 1rem;">
+          <label>Фильтр по тегам</label>
+          <input type="text" id="tag-filter" placeholder="тег1,тег2">
+        </div>
+        <div>
+          <label>Сортировка</label>
+          <select id="sort-by">
+            <option value="created_at">Дата создания ↑</option>
+            <option value="-created_at">Дата создания ↓</option>
+            <option value="updated_at">Дата изменения ↑</option>
+            <option value="-updated_at">Дата изменения ↓</option>
+            <option value="uses_count">Частота использования ↑</option>
+            <option value="-uses_count">Частота использования ↓</option>
+          </select>
+        </div>
+      </details>
     </div>
-
-    <details id="filters-details" style="display: none;">
-      <summary><span>Фильтр и сортировка</span></summary>
-      <div style="margin-top: 1rem;">
-        <label>Фильтр по тегам</label>
-        <input type="text" id="tag-filter" placeholder="тег1,тег2"/>
-      </div>
-      <div>
-        <label>Сортировка</label>
-        <select id="sort-by">
-          <option value="created_at">Дата создания ↑</option>
-          <option value="-created_at">Дата создания ↓</option>
-          <option value="updated_at">Дата изменения ↑</option>
-          <option value="-updated_at">Дата изменения ↓</option>
-          <option value="uses_count">Частота использования ↑</option>
-          <option value="-uses_count">Частота использования ↓</option>
-        </select>
-      </div>
-    </details>
 
     <h3 style="margin-top: 1.5rem;">Промпты</h3>
     <div id="prompt-list"></div>
 
-    <hr style="margin: 1rem 0;" />
+    <hr style="margin: 1rem 0;">
 
     <!-- Дебаг-консоль -->
     <div class="debug-box" id="debug-output"></div>
@@ -276,7 +306,7 @@
 
       <div class="editable-field">
         <label>Теги</label>
-        <input type="text" id="edit-tags" placeholder="через запятую"/>
+        <input type="text" id="edit-tags" placeholder="через запятую">
         <span class="system-metadata">(системное)</span>
       </div>
 
@@ -290,11 +320,11 @@
     <h2>Создать новый промпт</h2>
     <div style="margin-top: 1rem;">
       <label>Название*</label>
-      <input type="text" id="new-title" required />
+      <input type="text" id="new-title" required>
     </div>
     <div>
       <label>Описание</label>
-      <input type="text" id="new-description" />
+      <input type="text" id="new-description">
     </div>
     <div>
       <label>Текст промпта*</label>
@@ -302,15 +332,15 @@
     </div>
     <div>
       <label>Теги</label>
-      <input type="text" id="new-tags" placeholder="через запятую" />
+      <input type="text" id="new-tags" placeholder="через запятую">
     </div>
     <div>
       <label>Автор</label>
-      <input type="text" id="new-author" />
+      <input type="text" id="new-author">
     </div>
     <div>
       <label>Произвольные метаданные</label>
-      <input type="text" id="new-user-metadata" placeholder="ключ:значение через запятую" />
+      <input type="text" id="new-user-metadata" placeholder="ключ:значение через запятую">
     </div>
     <button onclick="createNewPrompt()">Сохранить</button>
     <button onclick="hideCreateForm()" style="background: #555; margin-top: 0.5rem;">Отмена</button>
@@ -589,8 +619,8 @@
         div.className = "prompt-list-item";
 
         div.innerHTML = `
-          <strong>${prompt.metadata.title}</strong><br/>
-          <small>${prompt.metadata.description || prompt.content.slice(0, 30)}</small><br/>
+          <strong>${prompt.metadata.title}</strong><br>
+          <small>${prompt.metadata.description || prompt.content.slice(0, 30)}</small><br>
           <div style="margin-top: 0.5rem;">
             ${renderTags(prompt.metadata.tags)}
           </div>
@@ -628,7 +658,7 @@
 
         row.innerHTML = `
         <label>${key.replace(/_/g, " ").replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1))}</label>
-          <input type="text" id="meta-${key}" value="${val}"/>
+          <input type="text" id="meta-${key}" value="${val}">
           <span class="system-metadata">${isSystem ? "(системное)" : ""}</span>
         `;
 
@@ -689,8 +719,8 @@
           <h2>${prompt.metadata.title}</h2>
 
           <div class="header-meta">
-            <small>Обновлено: ${formatDate(prompt.metadata.updated_at)}</small><br/>
-            <small>Использований: <span class="uses-count">${prompt.metadata.uses_count}</span></small><br/>
+            <small>Обновлено: ${formatDate(prompt.metadata.updated_at)}</small><br>
+            <small>Использований: <span class="uses-count">${prompt.metadata.uses_count}</span></small><br>
             <small>Автор: ${prompt.metadata.author || "—"}</small>
           </div>
 
@@ -702,7 +732,7 @@
 
           <div style="margin-top: 1rem;">
             <div class="description-box">
-              <strong>Описание:</strong><br/>
+              <strong>Описание:</strong><br>
               ${prompt.metadata.description || "—"}
             </div>
           </div>
