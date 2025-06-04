@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Параметризованные промпты</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js "></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter&display=swap ');
+
+    :root {
+      --bg: #1e1e1e;
+      --card-bg: #2a2a2a;
+      --input-bg: #333333;
+      --accent: #6200ee;
+      --preview-bg: #1c1c1c;
+      --border-radius: 6px;
+      --use-count-bg: #4caf50;
+      --use-count-color: white;
+      --tag-colors: #6200ee, #03dac6, #ff9800, #f44336, #4caf50, #9c27b0;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      background: var(--bg);
+      color: white;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    h2, strong { font-weight: 600; }
+    label, small { font-size: 0.9rem; }
+
+    .sidebar {
+      width: 300px;
+      background: #222;
+      border-right: 1px solid #333;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      overflow-y: auto;
+    }
+
+    .main {
+      flex: 1;
+      padding: 1rem;
+      background: var(--card-bg);
+      overflow-y: auto;
+      position: relative;
+    }
+
+    input, textarea {
+      background: var(--input-bg);
+      color: white;
+      border: none;
+      padding: 0.5rem;
+      margin-top: 0.5rem;
+      border-radius: var(--border-radius);
+      width: 100%;
+    }
+
+    button {
+      margin-top: 0.5rem;
+      padding: 0.5rem 1rem;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: var(--border-radius);
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #5100cc;
+    }
+
+    .prompt-list-item {
+      padding: 0.75rem;
+      margin-bottom: 0.5rem;
+      background: #222;
+      border-radius: var(--border-radius);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .prompt-list-item:hover {
+      background: #333;
+    }
+
+    .tag-pill {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      margin: 0.2rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+
+    .tag-color:nth-child(1) { background: #6200ee; color: white; }
+    .tag-color:nth-child(2) { background: #03dac6; color: black; }
+    .tag-color:nth-child(3) { background: #ff9800; color: black; }
+    .tag-color:nth-child(4) { background: #f44336; color: white; }
+    .tag-color:nth-child(5) { background: #4caf50; color: white; }
+    .tag-color:nth-child(6) { background: #9c27b0; color: white; }
+
+    .params-block {
+      margin-top: 1rem;
+      padding: 0.75rem;
+      background: #222;
+      border-radius: var(--border-radius);
+    }
+
+    .preview {
+      margin-top: 1rem;
+      background: var(--preview-bg);
+      padding: 1rem;
+      border-radius: var(--border-radius);
+      white-space: pre-wrap;
+      border: 1px solid #333;
+    }
+
+    .popup {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      background: #333;
+      padding: 0.75rem 1rem;
+      border-radius: var(--border-radius);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(1rem);
+      transition: all 0.3s ease;
+      z-index: 100;
+    }
+
+    .popup.show {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    .message-success { background: #4caf50; }
+    .message-error { background: #f44336; }
+    .message-info { background: #6200ee; }
+
+    .message-text {
+      font-size: 0.9rem;
+    }
+
+    .description-box {
+      margin-top: 1rem;
+      background: #222;
+      padding: 0.75rem;
+      border-radius: var(--border-radius);
+    }
+
+    .header-meta {
+      font-size: 0.85rem;
+      color: #aaa;
+      margin-top: 0.25rem;
+    }
+
+    .uses-count {
+      background: var(--use-count-bg);
+      color: var(--use-count-color);
+      padding: 0.2rem 0.5rem;
+      border-radius: var(--border-radius);
+      font-size: 0.85rem;
+    }
+
+    .debug-box {
+      flex: 1;
+      background: #1a1a1a;
+      padding: 0.5rem;
+      font-size: 0.8rem;
+      overflow-y: auto;
+      max-height: 200px;
+      border-top: 1px solid #333;
+      margin-top: auto;
+    }
+
+    .debug-entry {
+      margin-bottom: 0.3rem;
+      white-space: pre-wrap;
+    }
+
+    .debug-entry.warn { color: orange; }
+    .debug-entry.error { color: red; }
+    .debug-entry.info { color: #ccc; }
+
+    .edit-button {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      background: #6200ee;
+      color: white;
+      font-size: 1.1rem;
+      border: none;
+      padding: 0.5rem;
+      border-radius: var(--border-radius);
+      cursor: pointer;
+    }
+
+    .edit-button:hover {
+      background: #4a00b5;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Попап -->
+  <div id="popup" class="popup" style="pointer-events: none; opacity: 0;"></div>
+
+  <!-- Левая панель -->
+  <div class="sidebar">
+    <div style="display: flex; align-items: center; gap: 0.5rem;">
+      <button id="btn-load">Выбрать папку</button>
+      <button onclick="refreshPrompts()" style="background: #333;">Обновить</button>
+    </div>
+    
+    <button onclick="showCreateForm()">➕ Создать новый промпт</button>
+
+    <div style="display: flex; align-items: center; gap: 0.5rem;">
+      <input type="text" id="search" placeholder="Поиск..." />
+      <button class="btn-filter-toggle" onclick="toggleFilter()">⚙</button>
+    </div>
+
+    <details id="filters-details" style="display: none;">
+      <summary><span>Фильтр и сортировка</span></summary>
+      <div style="margin-top: 1rem;">
+        <label>Фильтр по тегам</label>
+        <input type="text" id="tag-filter" placeholder="тег1,тег2"/>
+      </div>
+      <div>
+        <label>Сортировка</label>
+        <select id="sort-by">
+          <option value="created_at">Дата создания ↑</option>
+          <option value="-created_at">Дата создания ↓</option>
+          <option value="updated_at">Дата изменения ↑</option>
+          <option value="-updated_at">Дата изменения ↓</option>
+          <option value="uses_count">Частота использования ↑</option>
+          <option value="-uses_count">Частота использования ↓</option>
+        </select>
+      </div>
+    </details>
+
+    <h3 style="margin-top: 1.5rem;">Промпты</h3>
+    <div id="prompt-list"></div>
+
+    <hr style="margin: 1rem 0;" />
+
+    <!-- Дебаг-консоль -->
+    <div class="debug-box" id="debug-output"></div>
+  </div>
+
+  <!-- Карточка промпта -->
+  <div class="main" id="card-container">
+    <p>Выберите промпт из списка слева</p>
+  </div>
+
+  <!-- Форма редактирования -->
+  <div id="edit-prompt-form" class="main" style="display: none;">
+    <div class="edit-card">
+      <div style="position: relative;">
+        <h2>✏️ Редактирование</h2>
+        <button class="save-button" onclick="savePrompt(currentPrompt)" style="position: absolute; top: 0; right: 0; background: #4caf50;">💾 Сохранить</button>
+      </div>
+
+      <label>Текст промпта</label>
+      <textarea id="edit-body" rows="20"></textarea>
+
+      <div class="editable-field">
+        <label>Теги</label>
+        <input type="text" id="edit-tags" placeholder="через запятую"/>
+        <span class="system-metadata">(системное)</span>
+      </div>
+
+      <h3 style="margin-top: 1rem;">Метаданные</h3>
+      <div class="metadata-table" id="metadata-editor"></div>
+    </div>
+  </div>
+
+  <!-- Форма создания -->
+  <div id="create-prompt-form" class="main" style="display: none;">
+    <h2>Создать новый промпт</h2>
+    <div style="margin-top: 1rem;">
+      <label>Название*</label>
+      <input type="text" id="new-title" required />
+    </div>
+    <div>
+      <label>Описание</label>
+      <input type="text" id="new-description" />
+    </div>
+    <div>
+      <label>Текст промпта*</label>
+      <textarea id="new-body" rows="10"></textarea>
+    </div>
+    <div>
+      <label>Теги</label>
+      <input type="text" id="new-tags" placeholder="через запятую" />
+    </div>
+    <div>
+      <label>Автор</label>
+      <input type="text" id="new-author" />
+    </div>
+    <div>
+      <label>Произвольные метаданные</label>
+      <input type="text" id="new-user-metadata" placeholder="ключ:значение через запятую" />
+    </div>
+    <button onclick="createNewPrompt()">Сохранить</button>
+    <button onclick="hideCreateForm()" style="background: #555; margin-top: 0.5rem;">Отмена</button>
+  </div>
+
+  <script>
+    class PromptFile {
+      constructor(metadata, content, fileHandle) {
+        this.metadata = metadata || {};
+        this.content = content || "";
+        this.fileHandle = fileHandle;
+
+        this.validateMetadata();
+      }
+
+      validateMetadata() {
+        const now = new Date();
+
+        if (!this.metadata.uuid) this.metadata.uuid = this.generateUUID();
+        if (!this.metadata.created_at || isNaN(this.metadata.created_at)) this.metadata.created_at = now;
+        if (!this.metadata.updated_at || isNaN(this.metadata.updated_at)) this.metadata.updated_at = now;
+        if (typeof this.metadata.uses_count !== "number") this.metadata.uses_count = 0;
+        if (!Array.isArray(this.metadata.tags)) this.metadata.tags = [];
+        if (!this.metadata.title) this.metadata.title = "Без названия";
+        if (!this.metadata.description) this.metadata.description = "";
+        if (!this.metadata.author) this.metadata.author = "";
+      }
+
+      generateUUID() {
+        return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+          (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+        );
+      }
+
+      async save(fileHandle = this.fileHandle) {
+        const fullText = this.toYAML();
+
+        try {
+          const writable = await fileHandle.createWritable();
+          await writable.write(fullText);
+          await writable.close();
+          console.log("✅ Промпт сохранён:", this.metadata.title);
+        } catch (e) {
+          console.error("❌ Ошибка записи файла", e);
+        }
+      }
+
+      toYAML() {
+        const cleanMeta = {};
+
+        Object.entries(this.metadata).forEach(([k, v]) => {
+          if (Array.isArray(v)) {
+            cleanMeta[k] = `[${v.map(t => `"${t}"`).join(", ")}]`;
+          } else if (v instanceof Date && !isNaN(v.getTime())) {
+            cleanMeta[k] = `"${v.toISOString().replace("T", " ").slice(0, 16)}"`;
+          } else {
+            cleanMeta[k] = `"${v}"`;
+          }
+        });
+
+        const yaml = Object.entries(cleanMeta).map(([k, v]) => `${k}: ${v}`).join("\n");
+        return "---\n" + yaml + "\n---\n" + this.content.trim();
+      }
+
+      updateMetadata(newMetadata) {
+        const keysToUpdate = Object.keys(newMetadata);
+
+        keysToUpdate.forEach(key => {
+          let val = newMetadata[key];
+
+          if (key === "tags") {
+            val = val.split(",")
+                     .map(t => t.trim())
+                     .filter(Boolean);
+          } else if (key === "uses_count") {
+            val = parseInt(val) || this.metadata.uses_count;
+          } else if (key.includes("at")) {
+            val = new Date(val);
+            if (isNaN(val.getTime())) val = new Date();
+          } else if (typeof val === "string") {
+            val = val.trim();
+          }
+
+          this.metadata[key] = val;
+        });
+
+        this.metadata.updated_at = new Date();
+      }
+
+      updateContent(newContent) {
+        this.content = newContent.trim();
+        this.metadata.updated_at = new Date();
+      }
+    }
+
+    let prompts = [];
+    let currentPrompt = null;
+    let directoryHandle = null;
+
+    function showPopup(text, type = "info") {
+      const popup = document.getElementById("popup");
+      popup.className = `popup ${type ? `message-${type}` : ""}`;
+      popup.innerHTML = `<span class="message-text">${text}</span>`;
+      popup.classList.add("show");
+      setTimeout(() => popup.classList.remove("show"), 3000);
+    }
+
+    function logToDebugBox(...args) {
+      const output = document.getElementById("debug-output");
+      const entry = document.createElement("div");
+      entry.className = "debug-entry info";
+      entry.textContent = args.join(" ");
+      output.appendChild(entry);
+      output.scrollTop = output.scrollHeight;
+    }
+
+    console.log = (...args) => logToDebugBox("[LOG]", ...args.map(String));
+    console.warn = (...args) => {
+      const output = document.getElementById("debug-output");
+      const entry = document.createElement("div");
+      entry.className = "debug-entry warn";
+      entry.textContent = "[WARN] " + args.join(" ");
+      output.appendChild(entry);
+      output.scrollTop = output.scrollHeight;
+    };
+
+    console.error = (...args) => {
+      const output = document.getElementById("debug-output");
+      const entry = document.createElement("div");
+      entry.className = "debug-entry error";
+      entry.textContent = "[ERROR] " + args.join(" ");
+      output.appendChild(entry);
+      output.scrollTop = output.scrollHeight;
+    };
+
+    async function loadPromptsFromFolder() {
+      try {
+        const dir = await window.showDirectoryPicker({ mode: "readwrite" });
+        directoryHandle = dir;
+        const promptDir = await dir.getDirectoryHandle("prompts", { create: false });
+        loadPrompts(promptDir);
+      } catch (e) {
+        showPopup("❌ Папка 'prompts' не найдена", "error");
+      }
+    }
+
+    async function refreshPrompts() {
+      if (!directoryHandle) return showPopup("❗ Папка не выбрана", "error");
+
+      const promptDir = await directoryHandle.getDirectoryHandle("prompts", { create: false });
+      loadPrompts(promptDir);
+    }
+
+    async function loadPrompts(promptDir) {
+      prompts = [];
+
+      for await (const entry of promptDir.values()) {
+        if (entry.name.endsWith(".md")) {
+          try {
+            const file = await entry.getFile();
+            const text = await file.text();
+            const prompt = parseYAMLAndContent(text);
+            prompt.fileHandle = entry;
+            prompts.push(prompt);
+          } catch (e) {
+            console.error("Ошибка чтения файла", entry.name, e);
+          }
+        }
+      }
+
+      renderPromptList();
+      showPopup(`✅ ${prompts.length} промптов загружено`, "success");
+    }
+
+    function parseYAMLAndContent(md) {
+      const parts = md.split("---").map(s => s.trim());
+      const yaml = parts[1] || "";
+      const content = parts[2]?.trim() || "";
+
+      const meta = {};
+      const lines = yaml.split("\n");
+
+      lines.forEach(line => {
+        if (!line.includes(":")) return;
+
+        const [keyRaw, ...rest] = line.split(":");
+        const key = keyRaw.trim();
+        let val = rest.join(":").trim();
+
+        // Убираем кавычки только если это строка
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+          val = val.slice(1, -1).trim();
+        }
+
+        if (key === "tags") {
+          val = val.replace(/^\[|\]$/g, "")
+                   .split(/,\s*/)
+                   .map(t => t.replace(/^"|"$/g, "").trim())
+                   .filter(Boolean);
+        } else if (key === "uses_count") {
+          val = parseInt(val) || 0;
+        } else if (key.includes("at")) {
+          val = new Date(val);
+          if (isNaN(val.getTime())) val = new Date();
+        }
+
+        meta[key] = val;
+      });
+
+      return new PromptFile(meta, content, null);
+    }
+
+    function extractParamValues(content) {
+      const matches = content.match(/{{(.*?)}}/g) || [];
+      const params = {};
+      matches.forEach(m => {
+        const content = m.slice(2, -2).trim();
+        const parts = content.split(":");
+        const name = parts[0].trim();
+        const def = parts.slice(1).join(":").trim();
+        params[name] = def;
+      });
+      return params;
+    }
+
+    function getTagColor(index) {
+      const colors = ["#6200ee", "#03dac6", "#ff9800", "#f44336", "#4caf50", "#9c27b0"];
+      return colors[index % colors.length];
+    }
+
+    function formatDate(date) {
+      return date instanceof Date && !isNaN(date) ? date.toLocaleString() : "—";
+    }
+
+    function renderTags(tags) {
+      return (tags || []).map((t, i) => `
+        <span class="tag-pill tag-color" style="background:${getTagColor(i)}">${t}</span>
+      `).join("");
+    }
+
+    function renderPromptList() {
+      const list = document.getElementById("prompt-list");
+      list.innerHTML = "";
+
+      const search = document.getElementById("search").value.toLowerCase();
+      const tags = document.getElementById("tag-filter").value
+        .split(",")
+        .map(t => t.trim().toLowerCase())
+        .filter(Boolean);
+      const sortBy = document.getElementById("sort-by").value;
+
+      let filtered = [...prompts];
+
+      if (search) {
+        filtered = filtered.filter(p =>
+          p.metadata.title?.toLowerCase().includes(search) ||
+          p.metadata.description?.toLowerCase().includes(search) ||
+          p.content?.toLowerCase().includes(search)
+        );
+      }
+
+      if (tags.some(tag => tag)) {
+        filtered = filtered.filter(p =>
+          tags.every(tag => p.metadata.tags?.some(t => t.toLowerCase() === tag))
+        );
+      }
+
+      filtered.sort((a, b) => {
+        const key = sortBy.startsWith("-") ? sortBy.slice(1) : sortBy;
+        const sign = sortBy.startsWith("-") ? -1 : 1;
+        return sign * ((b.metadata[key] || 0) - (a.metadata[key] || 0));
+      });
+
+      filtered.forEach(prompt => {
+        const div = document.createElement("div");
+        div.className = "prompt-list-item";
+
+        div.innerHTML = `
+          <strong>${prompt.metadata.title}</strong><br/>
+          <small>${prompt.metadata.description || prompt.content.slice(0, 30)}</small><br/>
+          <div style="margin-top: 0.5rem;">
+            ${renderTags(prompt.metadata.tags)}
+          </div>
+        `;
+
+        div.onclick = () => showCard(prompt);
+        list.appendChild(div);
+      });
+    }
+
+    function toggleFilter() {
+      const details = document.getElementById("filters-details");
+      details.style.display = details.style.display === "none" ? "block" : "none";
+    }
+
+    function showEditCard(prompt) {
+      currentPrompt = prompt;
+
+      const container = document.getElementById("card-container");
+      const editContainer = document.getElementById("edit-prompt-form");
+
+      document.getElementById("edit-body").value = prompt.content;
+      document.getElementById("edit-tags").value = prompt.metadata.tags.join(", ");
+
+      const editor = document.getElementById("metadata-editor");
+      editor.innerHTML = "";
+
+      Object.entries(prompt.metadata).forEach(([key, val], index) => {
+        if (key === "tags") return;
+
+        const isSystem = ['uuid', 'created_at', 'updated_at', 'uses_count', 'title', 'description', 'author'].includes(key);
+
+        const row = document.createElement("div");
+        row.className = "editable-field";
+
+        row.innerHTML = `
+        <label>${key.replace(/_/g, " ").replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1))}</label>
+          <input type="text" id="meta-${key}" value="${val}"/>
+          <span class="system-metadata">${isSystem ? "(системное)" : ""}</span>
+        `;
+
+        editor.appendChild(row);
+      });
+
+      document.getElementById("meta-uses_count").value = prompt.metadata.uses_count;
+
+      container.style.display = "none";
+      editContainer.style.display = "block";
+    }
+
+    function hideEditCard() {
+      document.getElementById("edit-prompt-form").style.display = "none";
+      document.getElementById("card-container").style.display = "block";
+    }
+
+    function savePrompt(entry) {
+      const prompt = entry || currentPrompt;
+
+      const tagsInput = document.getElementById("edit-tags").value;
+
+      const editor = document.getElementById("metadata-editor");
+      const inputs = Array.from(editor.querySelectorAll("input"));
+
+      const newMeta = {};
+      inputs.forEach(input => {
+        const key = input.id.replace("meta-", "");
+        newMeta[key] = input.value;
+      });
+
+      newMeta.tags = tagsInput;
+      newMeta.uses_count = parseInt(newMeta.uses_count) || prompt.metadata.uses_count;
+
+      prompt.updateMetadata(newMeta);
+      prompt.updateContent(document.getElementById("edit-body").value);
+
+      prompt.save(prompt.fileHandle).then(() => {
+        showPopup("✅ Изменения сохранены", "success");
+      }).catch(e => {
+        showPopup("❌ Не удалось сохранить", "error");
+      });
+
+      hideEditCard();
+      showCard(prompt);
+      renderPromptList();
+    }
+
+    function showCard(prompt) {
+      currentPrompt = prompt;
+
+      const container = document.getElementById("card-container");
+      container.style.position = "relative";
+      container.innerHTML = `
+        <div style="position: relative;">
+          <button class="edit-button" onclick="showEditCard(currentPrompt)">✎</button>
+
+          <h2>${prompt.metadata.title}</h2>
+
+          <div class="header-meta">
+            <small>Обновлено: ${formatDate(prompt.metadata.updated_at)}</small><br/>
+            <small>Использований: <span class="uses-count">${prompt.metadata.uses_count}</span></small><br/>
+            <small>Автор: ${prompt.metadata.author || "—"}</small>
+          </div>
+
+          <div style="margin-top: 1rem;">
+            <div class="tags">
+              ${renderTags(prompt.metadata.tags)}
+            </div>
+          </div>
+
+          <div style="margin-top: 1rem;">
+            <div class="description-box">
+              <strong>Описание:</strong><br/>
+              ${prompt.metadata.description || "—"}
+            </div>
+          </div>
+
+          <div class="params-block" id="params-editor"></div>
+          <button onclick="copyPrompt()" class="btn-copy">📋 Копировать</button>
+          <div class="preview" id="preview"></div>
+        </div>
+      `;
+
+      updatePreviewAndParams(prompt.content);
+    }
+
+    function updatePreviewAndParams(content) {
+      const editor = document.getElementById("params-editor");
+      editor.innerHTML = "";
+
+      const params = extractParamValues(content);
+
+      Object.keys(params).forEach(name => {
+        const def = params[name];
+        editor.innerHTML += `
+          <label>${name}</label>
+          <input type="text" id="param-${name}" value="${def}" oninput="updatePreview('${content}')">
+        `;
+      });
+
+      updatePreview(content);
+    }
+
+    function updatePreview(content) {
+      const preview = document.getElementById("preview");
+      const params = extractParamValues(content);
+
+      let rendered = content;
+      Object.entries(params).forEach(([name, def]) => {
+        const val = document.getElementById(`param-${name}`)?.value || def;
+        rendered = rendered.replace(new RegExp(`{{\\s*${name}(?:\\s*:\\s*.*?)?}}`, "g"), val);
+      });
+
+      preview.innerHTML = marked.parse(rendered);
+    }
+
+    async function copyPrompt() {
+      const prompt = currentPrompt;
+      const content = prompt.content;
+      const params = extractParamValues(content);
+
+      let result = content;
+      Object.entries(params).forEach(([name, def]) => {
+        const val = document.getElementById(`param-${name}`)?.value || def;
+        result = result.replace(new RegExp(`{{\\s*${name}(?:\\s*:\\s*.*?)?}}`, "g"), val);
+      });
+
+      navigator.clipboard.writeText(result).then(() => {
+        prompt.metadata.uses_count++;
+        // prompt.metadata.updated_at = new Date();
+        prompt.save(prompt.fileHandle);
+        showPopup("📋 Скопировано", "success");
+        showCard(prompt); // обновляем карточку
+      }).catch(e => {
+        console.error("Не удалось скопировать:", e);
+        showPopup("❌ Не удалось скопировать", "error");
+      });
+    }
+
+    function generateUUID() {
+      return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+        (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+      );
+    }
+
+    async function createNewPrompt() {
+      const title = document.getElementById("new-title").value.trim();
+      const description = document.getElementById("new-description").value.trim();
+      const author = document.getElementById("new-author").value.trim();
+      const content = document.getElementById("new-body").value.trim();
+      const userFields = document.getElementById("new-user-metadata").value
+        .split(",")
+        .map(kv => kv.split(":"))
+        .filter(kv => kv.length >= 2);
+      const tags = document.getElementById("new-tags").value
+        .split(",")
+        .map(t => t.trim())
+        .filter(Boolean);
+
+      if (!title || !content) return showPopup("❗ Заполните обязательные поля", "error");
+
+      const now = new Date();
+      const meta = {
+        uuid: generateUUID(),
+        created_at: now,
+        updated_at: now,
+        uses_count: 0,
+        tags,
+        title,
+        description,
+        author
+      };
+
+      userFields.forEach(([k, v]) => {
+        meta[k.trim()] = v.trim();
+      });
+
+      if (!directoryHandle) return showPopup("❗ Папка не выбрана", "error");
+
+      const promptDir = await directoryHandle.getDirectoryHandle("prompts", { create: false });
+      const filename = title.replace(/\s+/g, "_") + ".md";
+      const fileHandle = await promptDir.getFileHandle(filename, { create: true });
+
+      const newPrompt = new PromptFile(meta, content, fileHandle);
+      await newPrompt.save(fileHandle);
+
+      prompts.push(newPrompt);
+      renderPromptList();
+      showCard(newPrompt);
+      hideCreateForm();
+      showPopup("🟢 Новый промпт создан", "success");
+    }
+
+    function showCreateForm() {
+      document.getElementById("card-container").style.display = "none";
+      document.getElementById("create-prompt-form").style.display = "block";
+    }
+
+    function hideCreateForm() {
+      document.getElementById("create-prompt-form").style.display = "none";
+      document.getElementById("card-container").style.display = "block";
+    }
+
+    function loadInitial() {
+      document.getElementById("btn-load").onclick = loadPromptsFromFolder;
+      document.getElementById("search").oninput = renderPromptList;
+      document.getElementById("tag-filter").oninput = renderPromptList;
+      document.getElementById("sort-by").onchange = renderPromptList;
+    }
+
+    window.onload = () => {
+      loadInitial();
+
+      (async () => {
+        try {
+          const dir = await window.showDirectoryPicker({ mode: "readwrite" });
+          directoryHandle = dir;
+          const promptDir = await dir.getDirectoryHandle("prompts", { create: false });
+          // showPopup(`⚠️ ${promptDir}`, "info");
+          loadPrompts(promptDir);
+        } catch (e) {
+          showPopup("⚠️ Папка 'prompts' не найдена", "info");
+        }
+      })();
+    };
+  </script>
+</body>
+</html>
